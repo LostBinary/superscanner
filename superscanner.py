@@ -45,8 +45,8 @@ SOCKET_TIMEOUT = 1.0
 UDP_TIMEOUT = 1.0
 PING_TIMEOUT = 1
 MAX_THREADS = 120
-OUT_CSV = "scan_full_results.csv"
-OUT_JSON = "scan_full_results.json"
+OUT_CSV = "resultados_scaner.csv"
+OUT_JSON = "resultados_scaner.json"
 # -------------------------------------------------
 
 def detect_local_subnet():
@@ -159,7 +159,7 @@ def udp_probe(host, port, timeout=UDP_TIMEOUT):
     except Exception as e:
         return False, f"err:{e}"
 
-def run_nmap(hosts, port_spec, nmap_args="-sS -sV -Pn", out_xml="nmap_verify.xml"):
+def run_nmap(hosts, port_spec, nmap_args="-sS -sV -Pn", out_xml="nmap_verif.xml"):
     if not shutil.which("nmap"):
         return {}
     hosts_str = " ".join(hosts)
@@ -251,14 +251,9 @@ def scan_rtsp_host(host, ports_to_try=None, creds=RTSP_CREDENTIALS, timeout=5, m
 CAMERA_KEYWORDS = ["onvif","camera","ipcam","h.264","h264","rtsp","dahua","hikvision","ipc","video","surveillance","nv12","g711","g726"]
 
 def heuristic_is_camera(host_info, rtsp_hits):
-    """
-    host_info: dict with tcp list of dicts containing port, open, banner, source
-    rtsp_hits: list of rtsp result dicts where ok==True
-    Returns score and boolean detection
-    """
     score = 0
     reasons = []
-    # ports of interest
+    # puertos de interes
     tcp_open_ports = [p["port"] for p in host_info.get("tcp",[]) if p.get("open")]
     if any(p in tcp_open_ports for p in (554,8554,37777,5000,80,8080)):
         score += 3
@@ -268,7 +263,7 @@ def heuristic_is_camera(host_info, rtsp_hits):
     if any(k.lower() in banners.lower() for k in CAMERA_KEYWORDS):
         score += 3
         reasons.append("banner contiene keywords de cámara")
-    # mac OUI heuristic
+    # mac OUI heuristico
     mac = host_info.get("mac") or ""
     if mac and len(mac.split(":")[0])==2:
         # not a reliable check here, but could add OUI DB later
@@ -353,7 +348,7 @@ def scan_tcp_and_banners(hosts, tcp_ports, threads=40):
                 tcp_res = []
             results[h] = tcp_res
             open_count = len([x for x in tcp_res if x["open"]])
-            print(f"[+] {h}: TCP open {open_count}")
+            print(f"[+] {h}: TCP abiertos: {open_count}")
     return results
 
 def scan_udp_hosts(hosts, udp_ports, threads=40):
@@ -376,7 +371,7 @@ def scan_udp_hosts(hosts, udp_ports, threads=40):
             results[h] = udp_res
             opens = len([u for u in udp_res if u["open"]])
             if opens:
-                print(f"[+] {h}: UDP replies on {opens} ports")
+                print(f"[+] {h}: UDP responde en puertos : {opens}")
     return results
 
 def rtsp_phase_over_hosts(hosts, tcp_info_dict, timeout=5, max_workers=6):
@@ -397,10 +392,6 @@ def rtsp_phase_over_hosts(hosts, tcp_info_dict, timeout=5, max_workers=6):
 
 # ---------------- Interactive menu ----------------
 def interactive_menu(state):
-    """
-    state is a dict to carry data between steps:
-      state = {"ips": [...], "results": {...}, ...}
-    """
     menu = """
 === NETWORK SCANNER - MENU INTERACTIVO ===
 1) Descubrir hosts por subnet (ping sweep)
@@ -432,7 +423,7 @@ Elige opción: """
             state.setdefault("ips", [])
             state["ips"].extend(ips)
             state["ips"] = sorted(set(state["ips"]))
-            print(f"[=] Hosts totales ahora: {len(state['ips'])}")
+            print(f"[=] Hosts totales: {len(state['ips'])}")
         elif choice == "3":
             detected = detect_local_subnet()
             if not detected:
@@ -454,7 +445,7 @@ Elige opción: """
             for h, tcp in tcp_results.items():
                 state["results"].setdefault(h, {"ip":h, "mac":None, "alive":True, "tcp":[], "udp":[], "rtsp":[], "camera_score":0, "camera_detected":False})
                 state["results"][h]["tcp"] = tcp
-            print("[=] TCP scan done.")
+            print("[=] Escaneo TCP OK.")
         elif choice == "5":
             if not state.get("ips"):
                 print("[!] No hay IPs. Añade o descubre hosts primero.")
@@ -466,7 +457,7 @@ Elige opción: """
             for h, udp in udp_results.items():
                 state["results"].setdefault(h, {"ip":h, "mac":None, "alive":True, "tcp":[], "udp":[], "rtsp":[], "camera_score":0, "camera_detected":False})
                 state["results"][h]["udp"] = udp
-            print("[=] UDP probes done.")
+            print("[=] UDP probes OK.")
         elif choice == "6":
             if not state.get("ips"):
                 print("[!] No hay IPs. Añade o descubre hosts primero.")
@@ -485,7 +476,7 @@ Elige opción: """
                 for p in ports:
                     # append or update
                     state["results"][h]["tcp"].append({"port": p["port"], "open": (p["state"]=="open"), "banner": f"nmap:{p.get('service','')} {p.get('version','')}".strip(), "source":["nmap"]})
-            print("[=] nmap verification done.")
+            print("[=] nmap verificacion OK.")
         elif choice == "7":
             if not state.get("results"):
                 print("[!] Ejecuta al menos el TCP scan (opción 4) o añade hosts.")
@@ -495,7 +486,7 @@ Elige opción: """
             for h, res in rtsp_hits.items():
                 state["results"].setdefault(h, {"ip":h})
                 state["results"][h]["rtsp"] = res
-            print("[=] RTSP phase done.")
+            print("[=] Fase RTSP OK.")
         elif choice == "8":
             if not state.get("results"):
                 print("[!] Ejecuta fases anteriores primero.")
@@ -507,8 +498,8 @@ Elige opción: """
                 info["camera_reasons"] = reasons
             print("[=] Heurística aplicada. Revisa el estado o guarda.")
         elif choice == "9":
-            outcsv = input(f"CSV output [{OUT_CSV}]: ").strip() or OUT_CSV
-            outjson = input(f"JSON output [{OUT_JSON}]: ").strip() or OUT_JSON
+            outcsv = input(f"CSV en [{OUT_CSV}]: ").strip() or OUT_CSV
+            outjson = input(f"JSON en [{OUT_JSON}]: ").strip() or OUT_JSON
             save_results(state.get("results", {}), csvfile=outcsv, jsonfile=outjson)
         elif choice == "10":
             # print summary
@@ -563,15 +554,15 @@ Elige opción: """
 
 # ------------------ Main CLI runner ------------------
 def main():
-    parser = argparse.ArgumentParser(description="Network scanner full (interactive + rtsp + heuristics).")
+    parser = argparse.ArgumentParser(description="Network Super Scanner (interactivo + rtsp + heuristica).")
     group = parser.add_mutually_exclusive_group(required=False)
-    group.add_argument("--subnet", help="CIDR to scan (ex: 192.168.1.0/24). If omitted, attempts to auto-detect /24.")
-    group.add_argument("--ips", help="Comma-separated IPs to scan.")
-    parser.add_argument("--prompt", action="store_true", help="Prompt for manual IPs.")
-    parser.add_argument("--interactive", action="store_true", help="Launch interactive menu.")
-    parser.add_argument("--no-udp", action="store_true", help="Skip UDP probes.")
-    parser.add_argument("--no-nmap", action="store_true", help="Skip nmap verification.")
-    parser.add_argument("--ffprobe-timeout", type=float, default=5.0, help="Timeout (s) for ffprobe attempts.")
+    group.add_argument("--subnet", help="CIDR a escanear (ex: 192.168.1.0/24). Si se omite, auto-detectara /24.")
+    group.add_argument("--ips", help="Separadas por coma")
+    parser.add_argument("--ip", action="store_true", help="Prompt para IPs.")
+    parser.add_argument("--i", action="store_true", help="Carga Menu CLI (Interfaz consola)")
+    parser.add_argument("--no-udp", action="store_true", help="Salta UDP probes.")
+    parser.add_argument("--no-nmap", action="store_true", help="Salta nmap.")
+    parser.add_argument("--ffprobe-timeout", type=float, default=5.0, help="Cuanto tiempo (s) para intentos de ffprobe.")
     parser.add_argument("--out-csv", default=OUT_CSV)
     parser.add_argument("--out-json", default=OUT_JSON)
     args = parser.parse_args()
@@ -579,7 +570,7 @@ def main():
     state = {}
     # build initial IP list
     ips = []
-    if args.prompt:
+    if args.ip:
         s = input("Introduce IPs (coma-sep): ").strip()
         ips = [ip.strip() for ip in s.split(",") if ip.strip()]
     elif args.ips:
@@ -587,9 +578,9 @@ def main():
     else:
         subnet = args.subnet or detect_local_subnet()
         if not subnet:
-            print("[!] No pude detectar subred local. Usa --subnet, --ips o --prompt.")
+            print("[!] No pude detectar subred local. Usa --subnet, --ips o --ip.")
             # still allow interactive
-            if args.interactive:
+            if args.i:
                 state["ips"] = []
                 interactive_menu(state)
                 save_results(state.get("results", {}), csvfile=args.out_csv, jsonfile=args.out_json)
@@ -599,9 +590,9 @@ def main():
         ips = discover_hosts_from_subnet(subnet)
 
     state["ips"] = ips
-    print(f"[*] Hosts initial candidates: {len(ips)}")
+    print(f"[*] Candidato para Host inicial: {len(ips)}")
 
-    if args.interactive:
+    if args.i:
         interactive_menu(state)
         save_results(state.get("results", {}), csvfile=args.out_csv, jsonfile=args.out_json)
         return
@@ -622,7 +613,7 @@ def main():
 
     # nmap optional
     if not args.no_nmap and shutil.which("nmap"):
-        print("[*] Running nmap verification...")
+        print("[*] Verificando resultados con nmap...")
         port_spec = ",".join(str(p) for p in DEFAULT_TCP_PORTS)
         nmap_out = run_nmap(list(results.keys()), port_spec)
         for h, ports in nmap_out.items():
@@ -643,7 +634,8 @@ def main():
         info["camera_reasons"] = reasons
 
     save_results(results, csvfile=args.out_csv, jsonfile=args.out_json)
-    print("[*] Done. Review outputs and examine hosts with camera_detected=True carefully.")
+    print("[*] OK. Revisa informes y examina host con camera_detected=True con cuidado.")
 
 if __name__ == "__main__":
     main()
+
