@@ -11,7 +11,7 @@ Escáner híbrido:
  - Opcional: lanza nmap para verificación si está instalado
  - Fase RTSP con ffprobe (intenta patrones y credenciales comunes)
  - Heurística automática para detectar cámaras (puertos + banners + RTSP hits)
- - CLI interactivo (--interactive) para ejecutar fases por separado o todo el flujo
+ - CLI interactivo (--i) para ejecutar fases por separado o todo el flujo
  - Guarda resultados en CSV/JSON
 
 USO: 
