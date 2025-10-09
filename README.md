@@ -1,4 +1,4 @@
-c# superscanner
+# superscanner
 Un scanner automatizado de redes
 ***POR MEJORAR***
 A la espera de actualizaciones, pulidos y extensiones del código.
