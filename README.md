@@ -22,7 +22,7 @@ USO:
   
   python superscanner.py --ips 192.168.1.10,192.168.1.12           # ejecutar pipeline sobre IPs
   
-  python superscanner.py --prompt --interactive                    # te pedirá IPs por input()
+  python superscanner.py --ip --i                                  # te pedirá IPs por input()
   
   python superscanner.py --no-udp                                  # no hace probe UDP
   
