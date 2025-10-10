@@ -17,12 +17,14 @@ Escáner híbrido:
 USO: 
 
   python superscanner.py                                           # intenta detectar /24 local y hace scans por defecto
+
+ python superscanner.py --i        # arranca interfaz por consola CLI
   
   python superscanner.py --subnet 192.168.1.0/24
   
   python superscanner.py --ips 192.168.1.10,192.168.1.12           # ejecutar pipeline sobre IPs
   
-  python superscanner.py --ip --i                                  # te pedirá IPs por input()
+  python superscanner.py --ip                                      # te pedirá IPs por input()
   
   python superscanner.py --no-udp                                  # no hace probe UDP
   
