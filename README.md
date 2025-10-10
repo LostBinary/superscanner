@@ -1,6 +1,8 @@
 # superscanner
 Un scanner automatizado de redes
+
 ***POR MEJORAR***
+
 A la espera de actualizaciones, pulidos y extensiones del código.
 
 """
@@ -36,6 +38,7 @@ USO:
   - Python 3.8+
   - ffprobe (parte de ffmpeg) en PATH para la fase RTSP (recomendado)
   - (Opcional) nmap en PATH para verificación adicional
+    
                                  NOTA: Ejecuta solo en redes que controles o tengas permiso para escanear.
 
   
