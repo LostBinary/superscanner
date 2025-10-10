@@ -405,11 +405,17 @@ def interactive_menu(state):
 9) Guardar resultados (CSV/JSON)
 10) Mostrar resumen en pantalla
 11) Ejecutar pipeline completo (discover -> tcp -> udp -> nmap -> rtsp -> heur)
-0) Salir
+q) Salir
+-----------------------------------------------------------------
+== Búsqueda de host ocultos y análisis detallado ==
+a) Búsqueda intensiva de host
+b) Análisis detallado de puertos abiertos
+c) Búsqueda por MAC
+q) Salir
 Elige opción: """
     while True:
         choice = input(menu).strip()
-        if choice == "0":
+        if choice == "q":
             print("Saliendo...")
             break
         elif choice == "1":
@@ -549,6 +555,12 @@ Elige opción: """
                 info["camera_detected"] = detected
                 info["camera_reasons"] = reasons
             print("[=] Pipeline completo ejecutado.")
+        elif choice == "a":  
+            print("Opción en desarrollo...")
+        elif choice == "b":
+            print("Opción en desarrollo...")
+        elif choice == "c":
+            print("Opción en desarrollo...")
         else:
             print("[!] Opción no válida.")
 
