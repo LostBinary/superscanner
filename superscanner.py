@@ -595,6 +595,8 @@ def main():
             if args.i:
                 state["ips"] = []
                 interactive_menu(state)
+                print("\n")
+                print("\n")
                 save_results(state.get("results", {}), csvfile=args.out_csv, jsonfile=args.out_json)
                 return
             sys.exit(1)
@@ -606,6 +608,8 @@ def main():
 
     if args.i:
         interactive_menu(state)
+        print("\n")
+        print("\n")
         save_results(state.get("results", {}), csvfile=args.out_csv, jsonfile=args.out_json)
         return
 
