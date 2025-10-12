@@ -50,13 +50,21 @@ OUT_JSON = "resultados_scaner.json"
 # -------------------------------------------------
 
 def detect_local_subnet():
+    
+    print(f"[*] Se realizará un escaneo de red actual...\n  [*] Buscando hosts...")
     try:
+        print("[*] Detectando subred local...")
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
         local_ip = s.getsockname()[0]
+        print(f"[=] IP local detectada: {local_ip}")
         s.close()
+        print(f"[*] Asumiendo máscara /24 para la subred local...")
+        print(f"[*] Subred calculada: {local_ip}/24")
         return str(ipaddress.ip_network(local_ip + "/24", strict=False))
+        print(f"[=] Subred local detectada: {subnet}")
     except Exception:
+        print("[!] No se pudo detectar la subred local automáticamente.")
         return None
 
 def run_cmd(cmd, timeout=5):
@@ -68,181 +76,282 @@ def run_cmd(cmd, timeout=5):
 
 def ping_host(ip):
     system = platform.system()
+    print(f"[*] Sistema operativo detectado: {system}")
     if system == "Windows":
+        print("[=] Detectado Windows, usando herramientas nativas...")
+        print(f"[!] Nota: En Windows el ping puede requerir privilegios elevados."
+              "Ejecutar terminal como administrador si es necesario.")
         cmd = ["ping", "-n", "1", "-w", str(int(PING_TIMEOUT*1000)), ip]
     else:
+        print("[=] Detectado Unix-Linux, usando herramientas nativas...")
+        print(f"[!] Nota: En Linux el ping puede requerir privilegios elevados."
+              "Ejecutar terminal como root o con sudo si es necesario.")
         cmd = ["ping", "-c", "1", "-W", str(int(PING_TIMEOUT)), ip]
     rc, _, _ = run_cmd(cmd, timeout=PING_TIMEOUT+1)
+    print(f"[*] Resultado del ping a {ip}: rc={rc}")
     return rc == 0
+    print(f"[=] Ping a {ip} {'exitoso' if rc==0 else 'fallido'}")
 
 def arp_table_hosts():
     # parse 'arp -a' output
     try:
+        print("[*] Obteniendo tabla ARP local...")
         rc, out, err = run_cmd(["arp", "-a"], timeout=3)
+        print(f"[*] Resultado de la tabala ARP: rc={rc}, err={err.strip()}")
+        if rc != 0:
+            print("[!] No se pudo obtener la tabla ARP.")
+            return []
     except Exception:
+        print("[!] No se pudo ejecutar el comando arp.")
         return []
     entries = []
     if not out:
+        print("[!] La tabla ARP está vacía.")
         return entries
     for line in out.splitlines():
+        print(f"[*] Procesando línea de tabla ARP: {line}")
         line = line.strip()
         if not line:
+            print("[!] Línea vacia, saltando...")
             continue
         ip = None
         mac = None
         parts = line.split()
         for p in parts:
+            print(f"[*] Analizando: {p}")
             if p.startswith("(") and p.endswith(")"):
                 ip = p.strip("()")
+                print(f"[?] Encontrada posible IP: {ip}")
             if (":" in p or "-" in p) and len(p) >= 7:
                 mac = p.replace("-", ":")
+                print(f"[?] Encontrada posible MAC: {mac}")
         if not ip:
-            # try windows format like '192.168.1.1           00-11-22-33-44-55   dynamic'
+            print("[*] Intentando otro formato de parsing...")
             for p in parts:
+                print(f"[*] Analizando: {p}")
+                if p.count(":") == 5 and len(p) >= 14:
+                    mac = p
+                    print(f"[?] Encontrada posible MAC: {mac}")
                 if p.count(".") == 3 and len(p) <= 15:
                     ip = p
+                    print(f"[?] Encontrada posible IP: {ip}")
         if ip:
+            print(f"[=] IP detectada: {ip}")
+        if mac:
+            print(f"[=] MAC detectada: {mac}")
+        if ip and mac: 
             entries.append({"ip": ip, "mac": mac, "raw": line})
+            print(f"[=] Detectada ip {ip} con mac {mac}")
     return entries
 
 def is_port_open_tcp(host, port, timeout=SOCKET_TIMEOUT):
     try:
+        print(f"[*] Probando puerto TCP {port} en {host}...")
         with socket.create_connection((host, port), timeout=timeout):
+            print(f"[=] Puerto TCP {port} abierto en {host}")
             return True
     except Exception:
         return False
 
 def grab_banner_tcp(host, port, timeout=SOCKET_TIMEOUT):
     try:
+        print(f"[*] Obteniendo banner TCP de {host}:{port}...")
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(timeout)
         s.connect((host, port))
+        print(f"[*] Conectado a {host}:{port}, enviando datos de prueba...")
         if port in (80,8080,8000,8443,554):
+            print("[*] Puerto HTTP/RTSP detectado, enviando petición HEAD...")
             try:
+                print("[*] Enviando HEAD / HTTP/1.0")
                 s.sendall(b"HEAD / HTTP/1.0\r\n\r\n")
             except Exception:
                 pass
+            print("[*] Esperando respuesta...")
         data = b""
+        print("[*] Recibiendo datos...")
         try:
             data = s.recv(2048)
+            print(f"[*] Recibidos {len(data)} bytes")
         except Exception:
+            print("[!] Error al recibir datos")
             pass
         s.close()
+        print("[!] Conexión cerrada")
         if data:
+            print(f"[=] Banner recibido: {data[:100]!r}")
             st = data.decode(errors="ignore").strip()
+            print(f"[=] Banner decodificado: {st}")
             st = " ".join(st.split())
+            print(f"[=] Banner limpiado: {st}")
             return st[:800]
+        print("[!] No se recibió ningún banner")
         return ""
     except Exception:
+        print("[!] Error al obtener el banner")
         return ""
 
 def udp_probe(host, port, timeout=UDP_TIMEOUT):
     try:
+        print(f"[*] Probando puerto UDP {port} en {host}...")
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(timeout)
         pkt = b"\x00"
+        print(f"[*] Enviando paquete UDP de prueba a {host}:{port}...")
         try:
+            print(f"[*] Enviando paquete: {pkt!r}")
             sock.sendto(pkt, (host, port))
+            print("[*] Paquete enviado, esperando respuesta...")
         except Exception:
+            print("[!] Error al enviar el paquete UDP")
             sock.close()
+            print("[!] Conexión cerrada")
             return False, "send-failed"
         try:
+            print("[*] Esperando respuesta UDP...")
             data, addr = sock.recvfrom(2048)
+            print(f"[=] Respuesta UDP recibida de {addr}: {data!r}")
             sock.close()
             return True, f"recv_len={len(data)}"
         except socket.timeout:
+            print("[!] Timeout esperando respuesta UDP")
             sock.close()
+            print("[!] Conexión cerrada")
             return False, "no-reply"
         except Exception as e:
+            print(f"[!] Error al recibir respuesta UDP: {e}")
             sock.close()
+            print("[!] Conexión cerrada")
             return False, f"err:{e}"
     except Exception as e:
+        print(f"[!] Error al probar puerto UDP {port} en {host}: {e}")
         return False, f"err:{e}"
 
 def run_nmap(hosts, port_spec, nmap_args="-sS -sV -Pn", out_xml="nmap_verif.xml"):
+    print(f"[*] Ejecutando nmap en hosts: {hosts} con puertos: {port_spec}")
     if not shutil.which("nmap"):
+        print("[!] nmap no encontrado en PATH, saltando escaneo nmap.")
         return {}
     hosts_str = " ".join(hosts)
+    print(f"[*] Hosts a escanear: {hosts_str}")
     cmd = f"nmap {nmap_args} -p {port_spec} -oX {out_xml} {hosts_str}"
-    print("[*] Ejecutando nmap:", cmd)
+    print(f"[*] Ejecutando nmap sobre {hosts_str}")
     try:
         proc = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=300)
+        print(f"[*] nmap terminado con rc={proc.returncode}")
     except subprocess.TimeoutExpired:
         print("[!] nmap timeout")
         return {}
     results = {}
+    print(f"[*] Parseando resultados nmap desde {out_xml}...")
     try:
+        print("[*] Leyendo archivo XML de nmap...")
         tree = ET.parse(out_xml)
         root = tree.getroot()
         for h in root.findall("host"):
             addr = None
             for a in h.findall("address"):
+                print(f"[*] Procesando dirección: {a.attrib}")
                 if a.get("addrtype") == "ipv4":
                     addr = a.get("addr")
+                    print(f"[=] Dirección IPv4 detectada: {addr}")
             if not addr:
+                print("[!] No se encontró dirección IPv4, saltando...")
                 continue
             ports = []
             ports_elem = h.find("ports")
+            print(f"[*] Procesando puertos para {addr}...")
             if ports_elem is None:
+                print("[!] No se encontraron puertos, saltando...")
                 continue
             for p in ports_elem.findall("port"):
+                print(f"[*] Procesando puerto: {p.attrib}")
                 pid = int(p.get("portid"))
                 state = p.find("state").get("state") if p.find("state") is not None else "unknown"
+                print(f"[=] Puerto {pid} estado: {state}")
                 serv = p.find("service")
+                print(f"[*] Procesando servicio: {serv.attrib if serv is not None else 'None'}")
                 svc = serv.get("name") if serv is not None and "name" in serv.attrib else ""
                 ver = ""
+                print(f"[=] Servicio detectado: {svc}")
                 if serv is not None and "product" in serv.attrib:
+                    print("[*] Obteniendo versión del servicio...")
                     ver = serv.get("product","") + " " + serv.get("version","")
+                    print(f"[=] Versión detectada: {ver.strip()}")
                 ports.append({"port": pid, "state": state, "service": svc, "version": ver})
+                print(f"[=] Puerto añadido: {pid} {state} {svc} {ver.strip()}")
             results[addr] = ports
+            print(f"[=] Resultados para {addr}: {ports}")
     except Exception as e:
         print("[!] Error parsing nmap XML:", e)
     return results
 
 # ---------------- RTSP / ffprobe ----------------
 def try_ffprobe(url, timeout=5):
+    print(f"[*] Probando URL RTSP con ffprobe: {url}")
     """Return (ok:bool, note:str). Requires ffprobe in PATH."""
     if not shutil.which("ffprobe"):
+        print("[!] ffprobe no encontrado en PATH.")
         return False, "ffprobe-not-found"
     try:
+        print(f"[*] Ejecutando ffprobe con timeout {timeout}s...")
         cmd = ["ffprobe", "-v", "error", "-timeout", str(int(timeout*1000000)), "-rtsp_transport", "tcp", "-i", url]
         proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout+2)
         stderr = proc.stderr.decode(errors="ignore")
         ok = proc.returncode == 0 or ("Stream" in stderr) or ("Input" in stderr) or ("Video:" in stderr)
+        print(f"[*] ffprobe terminado con rc={proc.returncode}, ok={ok}")
         return ok, stderr.strip().replace("\n"," ")[:600]
     except Exception as e:
+        print(f"[!] Error ejecutando ffprobe: {e}")
         return False, str(e)
 
 def build_rtsp_urls_for_host(host, ports):
     urls = []
     for port in ports:
+        print(f"[*] Construyendo URLs RTSP para {host}:{port}...")
         for p in RTSP_PATTERNS:
+            print(f"[*] Añadiendo patrón: {p}")
             if port == 554:
+                print(f"[*] Puerto por defecto 554, sin puerto en URL.")
                 urls.append(f"rtsp://{host}{p}")
             urls.append(f"rtsp://{host}:{port}{p}")
+            print(f"[=] URL añadida: {urls[-1]}")
     return urls
 
 def scan_rtsp_host(host, ports_to_try=None, creds=RTSP_CREDENTIALS, timeout=5, max_workers=6):
+    print(f"[*] Escaneando host RTSP: {host}...")
     ports = ports_to_try or RTSP_PORTS_TO_TRY
     urls = build_rtsp_urls_for_host(host, ports)
     results = []
+    print(f"[*] Probando {len(urls)} URLs RTSP con {len(creds)} combinaciones de credenciales...")
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        print("[*] Iniciando pruebas concurrentes de ffprobe...")
         futures = {}
         for url in urls:
+            print(f"[*] Probando URL base: {url}")
             for user, pwd in creds:
                 if user or pwd:
+                    print(f"[*] Probando con credenciales: {user}:{pwd}")
                     full = url.replace("rtsp://", f"rtsp://{user}:{pwd}@")
+                    print(f"[=] URL completa: {full}")
                 else:
+                    print("[*] Probando sin credenciales.")
                     full = url
+                    print(f"[=] URL completa: {full}")
                 futures[ex.submit(try_ffprobe, full, timeout)] = (full, user, pwd)
         for fut in as_completed(futures):
+            print("[*] Esperando resultado de ffprobe...")
             full, user, pwd = futures[fut]
+            print(f"[*] Resultado recibido para {full}")
             try:
                 ok, note = fut.result()
             except Exception as e:
+                print(f"[!] Error en ffprobe para {full}: {e}")
                 ok, note = False, str(e)
             results.append({"host": host, "url": full, "user": user, "pass": pwd, "ok": ok, "note": note})
+            print(f"[=] Resultado añadido: {results[-1]}")
             if ok:
+                print("[*] Éxito detectado, deteniendo pruebas adicionales para este host.")
                 # stop early on first success for host
                 return results
     return results
@@ -255,24 +364,32 @@ def heuristic_is_camera(host_info, rtsp_hits):
     reasons = []
     # puertos de interes
     tcp_open_ports = [p["port"] for p in host_info.get("tcp",[]) if p.get("open")]
+    print(f"[*] Puertos TCP abiertos: {tcp_open_ports}")
     if any(p in tcp_open_ports for p in (554,8554,37777,5000,80,8080)):
         score += 3
         reasons.append("puertos-rtsp/http detectados")
+        print("[=] Puertos de interés para cámaras detectados.")
     # banners
     banners = " ".join([p.get("banner","") or "" for p in host_info.get("tcp",[])])
+    print(f"[*] Banners combinados: {banners}")
     if any(k.lower() in banners.lower() for k in CAMERA_KEYWORDS):
         score += 3
         reasons.append("banner contiene keywords de cámara")
+        print("[=] Keywords de cámara detectadas en banners.")
     # mac OUI heuristico
     mac = host_info.get("mac") or ""
+    print(f"[*] MAC address: {mac}")
     if mac and len(mac.split(":")[0])==2:
+        print("[*] MAC address presente, pero no se hace verificación OUI.")
         # not a reliable check here, but could add OUI DB later
         pass
     # RTSP hits
     if rtsp_hits:
         score += 5
         reasons.append("rtsp-responds")
+        print("[=] Respuesta RTSP positiva detectada.")
     detected = score >= 4
+    print(f"[=] Heurística de cámara: score={score}, detectado={detected}, razones={reasons}")
     return score, detected, reasons
 
 # ---------------- I/O save ----------------
@@ -280,72 +397,96 @@ def save_results(results_dict, csvfile=OUT_CSV, jsonfile=OUT_JSON):
     rows = []
     for host, info in results_dict.items():
         base = {"host": host, "mac": info.get("mac",""), "alive": info.get("alive", False), "camera_score": info.get("camera_score",0), "camera_detected": info.get("camera_detected", False)}
+        print(f"[*] Procesando resultados para {host}: {info}")
         # tcp
         for t in info.get("tcp", []):
             r = base.copy()
             r.update({"proto":"tcp","port":t["port"], "open": t.get("open", False), "banner": t.get("banner",""), "sources": ",".join(t.get("source",[]))})
             rows.append(r)
+            print(f"[=] Fila añadida: {r}")
         # udp
         for u in info.get("udp", []):
             r = base.copy()
             r.update({"proto":"udp","port":u["port"], "open": u.get("open", False), "banner": u.get("note",""), "sources": ",".join(u.get("source",[]))})
             rows.append(r)
+            print(f"[=] Fila añadida: {r}")
         # if none
         if not info.get("tcp") and not info.get("udp"):
             r = base.copy()
             r.update({"proto":"","port":"","open":"","banner":"","sources":""})
             rows.append(r)
+            print(f"[=] Fila añadida (sin puertos): {r}")
     # write csv
     with open(csvfile, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["host","mac","alive","camera_score","camera_detected","proto","port","open","banner","sources"])
         writer.writeheader()
+        print("[*] Escribiendo archivo CSV...")
         for row in rows:
             writer.writerow(row)
+            print(f"[=] Fila escrita: {row}")
     # write json
     with open(jsonfile, "w", encoding="utf-8") as f:
         json.dump(results_dict, f, indent=2, ensure_ascii=False)
-    print(f"[+] Saved CSV: {csvfile} and JSON: {jsonfile}")
+        print("[*] Escribiendo archivo JSON...")
+    print(f"[+] Seguardo CSV en {csvfile} y JSON en {jsonfile}")
 
 # ----------------- Pipeline functions -----------------
 def discover_hosts_from_subnet(subnet, threads=MAX_THREADS):
     ips = []
     net = ipaddress.ip_network(subnet, strict=False)
+    print(f"[*] Subred {subnet} tiene {net.num_addresses} direcciones.")
     if net.num_addresses > 4096:
         raise ValueError("Network too large; choose smaller range.")
-    print(f"[*] Doing ping sweep on {subnet} ...")
+        print(f"[!] La subred es muy grande ({net.num_addresses} direcciones), elige un rango más pequeño.")
+    print(f"[*] Haciendo ping sweep en {subnet} ...")
     with ThreadPoolExecutor(max_workers=min(threads, 200)) as ex:
         futures = {ex.submit(ping_host, str(ip)): str(ip) for ip in net.hosts()}
+        print(f"[*] Lanzados {len(futures)} hilos de ping...")
         for fut in as_completed(futures):
             ip = futures[fut]
+            print(f"[*] Ping completado para {ip}, obteniendo resultado...")
             try:
                 ok = fut.result()
+                print(f"[=] Ping a {ip} {'exitoso' if ok else 'fallido'}")
             except Exception:
                 ok = False
+                print(f"[!] Error en ping a {ip}")
             if ok:
                 ips.append(ip)
+                print(f"[+] Host vivo detectado: {ip}")
+    print(f"[+] Descubiertos {len(ips)} hosts vivos en {subnet}.")
     return ips
 
 def scan_tcp_and_banners(hosts, tcp_ports, threads=40):
     results = {}
+    print(f"[*] Escaneando puertos TCP en {len(hosts)} hosts...")
     def scan_host_tcp(host):
         host_tcp = []
+        print(f"[*] Escaneando host {host}...")
         for p in tcp_ports:
             ok = is_port_open_tcp(host, p, timeout=SOCKET_TIMEOUT)
             banner = ""
             sources = []
+            print(f"[*] Puerto {p} en {host} {'abierto' if ok else 'cerrado'}")
             if ok:
                 banner = grab_banner_tcp(host, p, timeout=SOCKET_TIMEOUT)
                 sources.append("tcp-connect")
+                print(f"[*] Banner para {host}:{p}: {banner}")
             host_tcp.append({"port": p, "open": ok, "banner": banner, "source": sources})
+            print(f"[=] Resultado añadido para {host}:{p}: open={ok}, banner={banner}, sources={sources}")
         return host_tcp
     with ThreadPoolExecutor(max_workers=min(threads, len(hosts) or 1)) as ex:
         futures = {ex.submit(scan_host_tcp, h): h for h in hosts}
+        print(f"[*] Lanzados {len(futures)} hilos de escaneo TCP...")
         for fut in as_completed(futures):
             h = futures[fut]
+            print(f"[*] Escaneo TCP completado para {h}, obteniendo resultados...")
             try:
                 tcp_res = fut.result()
+                print(f"[=] Resultados TCP para {h}: {tcp_res}")
             except Exception:
                 tcp_res = []
+                print(f"[!] Error en escaneo TCP para {h}")
             results[h] = tcp_res
             open_count = len([x for x in tcp_res if x["open"]])
             print(f"[+] {h}: TCP abiertos: {open_count}")
@@ -353,45 +494,67 @@ def scan_tcp_and_banners(hosts, tcp_ports, threads=40):
 
 def scan_udp_hosts(hosts, udp_ports, threads=40):
     results = {}
+    print(f"[*] Escaneando puertos UDP en {len(hosts)} hosts...")
     def scan_host_udp(host):
         host_udp = []
+        print(f"[*] Escaneando host {host} para UDP...")
         for p in udp_ports:
             ok, note = udp_probe(host, p, timeout=UDP_TIMEOUT)
             src = ["udp-probe"] if ok else []
             host_udp.append({"port": p, "open": ok, "note": note, "source": src})
+            print(f"[=] Resultado UDP para {host}:{p}: open={ok}, note={note}, source={src}")
         return host_udp
     with ThreadPoolExecutor(max_workers=min(threads, len(hosts) or 1)) as ex:
         futures = {ex.submit(scan_host_udp, h): h for h in hosts}
+        print(f"[*] Lanzados {len(futures)} hilos de escaneo UDP...")
         for fut in as_completed(futures):
             h = futures[fut]
+            print(f"[*] Escaneo UDP completado para {h}, obteniendo resultados...")
             try:
                 udp_res = fut.result()
+                print(f"[=] Resultados UDP para {h}: {udp_res}")
             except Exception:
                 udp_res = []
+                print(f"[!] Error en escaneo UDP para {h}")
             results[h] = udp_res
             opens = len([u for u in udp_res if u["open"]])
+            print(f"[+] {h}: UDP abiertos: {opens}")
             if opens:
                 print(f"[+] {h}: UDP responde en puertos : {opens}")
     return results
 
 def rtsp_phase_over_hosts(hosts, tcp_info_dict, timeout=5, max_workers=6):
     all_rtsp_hits = {}
+    print(f"[*] Ejecutando fase RTSP en {len(hosts)} hosts...")
     with ThreadPoolExecutor(max_workers=min(max_workers, len(hosts) or 1)) as ex:
         futures = {ex.submit(scan_rtsp_host, h, None, RTSP_CREDENTIALS, timeout, max_workers): h for h in hosts}
+        print(f"[*] Lanzados {len(futures)} hilos de escaneo RTSP...")
         for fut in as_completed(futures):
             h = futures[fut]
+            print(f"[*] Escaneo RTSP completado para {h}, obteniendo resultados...")
             try:
                 res = fut.result()
+                print(f"[=] Resultados RTSP para {h}: {res}")
             except Exception as e:
                 res = [{"host": h, "url": "", "user":"", "pass":"", "ok": False, "note": str(e)}]
+                print(f"[!] Error en escaneo RTSP para {h}: {e}")
             hits = [r for r in res if r.get("ok")]
             all_rtsp_hits[h] = res
+            print(f"[+] {h}: RTSP hits: {len(hits)}")
             if hits:
                 print(f"[HIT-RTSP] {h} -> {hits[0]['url']} creds=({hits[0]['user']}:{hits[0]['pass']})")
     return all_rtsp_hits
 
 # ---------------- Interactive menu ----------------
 def interactive_menu(state):
+    arp_entries = arp_table_hosts()
+    if arp_entries:
+        print(f"[#] IP\t\tMAC\n-----------------------------------")
+        for entry in arp_entries:
+            print(f"{entry['ip']}\t{entry['mac']}")
+    else:
+        print(f"[!] No se detectaron hosts en la tabla ARP local.\n------------------------------------")
+    print(f"\n[*] Se realizó un escaneo a red actual...\n")
     menu = """
 === NETWORK SCANNER - MENU INTERACTIVO ===
 1) Descubrir hosts por subnet (ping sweep)
