@@ -4,7 +4,9 @@ Un scanner automatizado de redes
 ***POR MEJORAR***
 
 A la espera de actualizaciones, pulidos y extensiones del código.
-(el script bajo CLI hace un barrido a la red en busqueda de hosts)
+
+(el script de primeras, hace un barrido a la red en busqueda de hosts)
+
 """
 Escáner híbrido:
  - Descubre hosts (ping / arp / input manual)
@@ -15,6 +17,7 @@ Escáner híbrido:
  - Heurística automática para detectar cámaras (puertos + banners + RTSP hits)
  - CLI interactivo (--i) para ejecutar fases por separado o todo el flujo
  - Guarda resultados en CSV/JSON
+   
 
 USO: 
 
