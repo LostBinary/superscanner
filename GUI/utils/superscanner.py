@@ -44,7 +44,7 @@ RTSP_CREDENTIALS = [
 SOCKET_TIMEOUT = 1.0
 UDP_TIMEOUT = 1.0
 PING_TIMEOUT = 1
-MAX_THREADS = 2
+MAX_THREADS = 20
 OUT_CSV = "resultados_scaner.csv"
 OUT_JSON = "resultados_scaner.json"
 # -------------------------------------------------

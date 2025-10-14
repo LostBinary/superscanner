@@ -44,7 +44,7 @@ RTSP_CREDENTIALS = [
 SOCKET_TIMEOUT = 1.0
 UDP_TIMEOUT = 1.0
 PING_TIMEOUT = 1
-MAX_THREADS = 120
+MAX_THREADS = 20
 OUT_CSV = "resultados_scaner.csv"
 OUT_JSON = "resultados_scaner.json"
 # -------------------------------------------------
@@ -772,8 +772,8 @@ def main():
     if args.i:
         interactive_menu(state)
         print("\n")
-        print("\n")
         save_results(state.get("results", {}), csvfile=args.out_csv, jsonfile=args.out_json)
+        print("\n")       
         return
 
     # Non-interactive pipeline: tcp -> udp -> nmap (optional) -> rtsp -> heuristics
