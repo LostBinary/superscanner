@@ -17,6 +17,8 @@ Escáner híbrido:
  - Heurística automática para detectar cámaras (puertos + banners + RTSP hits)
  - CLI interactivo (--i) para ejecutar fases por separado o todo el flujo
  - Guarda resultados en CSV/JSON
+
+** Añadido version CGI, en carpeta CGI, ejecutar main.py
    
 
 USO: 
